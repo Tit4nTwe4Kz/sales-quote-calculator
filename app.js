@@ -41,7 +41,8 @@ const DATA = {
       { name: "Prepress & Fulfillment", cost: 0.1000 },
       { name: "Ship to 1 SCF", cost: 0.0400 },
       { name: "Postage", cost: 0.3550 },
-      { name: "Post-it Note", cost: 0.0275 }
+      { name: "Post-it Note", cost: 0.0275 },
+      { name: "Business Card", cost: 0.0300 }
     ],
     HWL: [
       { name: "Operating", cost: 0.0500 },
@@ -51,7 +52,8 @@ const DATA = {
       { name: "Machine", cost: 0.1000 },
       { name: "Envelope Labor", cost: 0.0415 },
       { name: "HWL Long Form Labor", cost: 0.1250 },
-      { name: "Post-it w/ Labor", cost: 0.0490 }
+      { name: "Post-it w/ Labor", cost: 0.0490 },
+      { name: "Business Card", cost: 0.0300 }
     ],
     Saturation: [
       { name: "Operating", cost: 0.0500 },
@@ -60,6 +62,16 @@ const DATA = {
       { name: "Postage", cost: 0.2450 },
       { name: "Envelope", cost: 0.0387 },
       { name: "Name Only Saturation Data", cost: 0.0110 }
+    ]
+  },
+
+  autoIncludedFixedCostsByCategory: {
+    HWL: [
+      "Operating",
+      "Prepress & Fulfillment",
+      "Ship to 1 SCF",
+      "Machine",
+      "Postage"
     ]
   },
 
@@ -163,9 +175,9 @@ const DATA = {
   aiVideoRule: {
     category: "BlueInk",
     paperFormat: '4"x8" White 80# cover',
-    setupCostUnder10000: 600.00,
-    perPieceCostAtOrAbove10000: 0.0600,
-    customAiLikenessVideoFlat: 600.00
+    setupCostUnder10000: 600.0,
+    perPieceCostAtOrAbove10000: 0.06,
+    customAiLikenessVideoFlat: 600.0
   }
 };
 
@@ -182,20 +194,27 @@ const el = {
   addAiVideo: document.getElementById("addAiVideo"),
   addCustomAiLikenessVideo: document.getElementById("addCustomAiLikenessVideo"),
   calculateBtn: document.getElementById("calculateBtn"),
-  resetBtn: document.getElementById("resetBtn"),
   status: document.getElementById("status"),
   costPerPiece: document.getElementById("costPerPiece"),
   totalCost: document.getElementById("totalCost"),
-  notes: document.getElementById("notes"),
-  breakdown: document.getElementById("breakdown")
+  notes: document.getElementById("notes")
 };
 
-function usd(value) {
+function usd4(value) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 4,
     maximumFractionDigits: 4
+  }).format(value);
+}
+
+function usd2(value) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(value);
 }
 
@@ -234,6 +253,16 @@ function renderCategories() {
   });
 }
 
+function getAutoIncludedFixedCosts(category) {
+  return DATA.autoIncludedFixedCostsByCategory[category] || [];
+}
+
+function getSelectableFixedCosts(category) {
+  const allFixedCosts = DATA.fixedCosts[category] || [];
+  const autoIncluded = getAutoIncludedFixedCosts(category);
+  return allFixedCosts.filter(item => !autoIncluded.includes(item.name));
+}
+
 function updatePaperFormats() {
   const category = el.category.value;
   const papers = category ? optionsByCategory(DATA.paperFormats, category) : [];
@@ -247,8 +276,8 @@ function updatePaperFormats() {
 function updateProductTypes() {
   const category = el.category.value;
   const paperFormat = el.paperFormat.value;
-
   const productTypes = DATA.productOptions?.[category]?.[paperFormat] || [];
+
   populateSelect(el.productType, productTypes, "Select Product Type", false);
 
   if (productTypes.length === 0) {
@@ -266,15 +295,8 @@ function updateAutoEnvelopeDisplay() {
     return;
   }
 
-  const envelope =
-    DATA.autoEnvelopeByCategoryAndPaper?.[category]?.[paperFormat] || null;
-
-  if (!envelope) {
-    el.autoEnvelope.textContent = "No auto-envelope rule found";
-    return;
-  }
-
-  el.autoEnvelope.textContent = envelope;
+  const envelope = DATA.autoEnvelopeByCategoryAndPaper?.[category]?.[paperFormat] || null;
+  el.autoEnvelope.textContent = envelope || "No auto-envelope rule found";
 }
 
 function updateDataLists() {
@@ -291,31 +313,24 @@ function updateColorOptions() {
 
 function renderFixedCharges() {
   const category = el.category.value;
-  const items = DATA.fixedCosts[category] || [];
+  const items = getSelectableFixedCosts(category);
 
   if (!category) {
     el.fixedCharges.innerHTML = "Select Category first";
-    el.fixedCharges.classList.add("muted");
     return;
   }
-
-  el.fixedCharges.classList.remove("muted");
 
   if (items.length === 0) {
-    el.fixedCharges.innerHTML = "No fixed charges available";
+    el.fixedCharges.innerHTML = "No optional fixed charges available";
     return;
   }
 
-  el.fixedCharges.innerHTML = items
-    .map(
-      (item, index) => `
-        <label class="checkbox-row">
-          <input type="checkbox" value="${escapeHtml(item.name)}" data-index="${index}" />
-          <span>${escapeHtml(item.name)} (${usd(item.cost)})</span>
-        </label>
-      `
-    )
-    .join("");
+  el.fixedCharges.innerHTML = items.map(item => `
+    <label class="checkbox-row">
+      <input type="checkbox" value="${item.name}" />
+      <span>${item.name} (${usd4(item.cost)})</span>
+    </label>
+  `).join("");
 }
 
 function updateAiVideoVisibility() {
@@ -336,68 +351,20 @@ function getSelectedFixedCharges() {
   return Array.from(checked).map(input => input.value);
 }
 
-function escapeHtml(value) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function renderNotes(notes, isError = false) {
-  if (!notes.length) {
-    el.notes.className = "notes";
+function renderNoteLines(lines) {
+  if (!lines.length) {
     el.notes.textContent = "No notes.";
     return;
   }
 
-  el.notes.className = isError ? "notes error" : "notes";
-  el.notes.innerHTML = `<ul class="notes-list">${notes
-    .map(note => `<li>${escapeHtml(note)}</li>`)
-    .join("")}</ul>`;
+  el.notes.innerHTML = lines.map(line => `<div>${line}</div>`).join("");
 }
 
-function renderBreakdown(lines) {
-  if (!lines.length) {
-    el.breakdown.textContent = "No calculation yet.";
-    return;
-  }
-
-  el.breakdown.innerHTML = lines
-    .map(line => {
-      const right = line.type === "money"
-        ? usd(line.value)
-        : escapeHtml(line.value);
-
-      return `
-        <div class="breakdown-item">
-          <div>${escapeHtml(line.label)}</div>
-          <div>${right}</div>
-        </div>
-      `;
-    })
-    .join("");
-}
-
-function resetResults() {
-  el.status.textContent = "Waiting";
-  el.costPerPiece.textContent = "$0.0000";
-  el.totalCost.textContent = "$0.0000";
-  renderNotes([]);
-  renderBreakdown([]);
-}
-
-function resetForm() {
-  el.quantity.value = "";
-  el.category.value = "";
-  updatePaperFormats();
-  updateDataLists();
-  updateColorOptions();
-  renderFixedCharges();
-  updateAutoEnvelopeDisplay();
-  updateAiVideoVisibility();
-  resetResults();
+function setError(notes) {
+  el.status.textContent = "ERROR";
+  el.costPerPiece.textContent = "ERROR";
+  el.totalCost.textContent = "ERROR";
+  renderNoteLines(notes);
 }
 
 function calculate() {
@@ -411,130 +378,108 @@ function calculate() {
   const addAiVideo = el.addAiVideo.checked;
   const addCustomAiLikenessVideo = el.addCustomAiLikenessVideo.checked;
 
-  const notes = [];
-  const breakdown = [];
+  const noteLines = [];
 
   if (!quantity || quantity <= 0) {
-    el.status.textContent = "ERROR";
-    el.costPerPiece.textContent = "ERROR";
-    el.totalCost.textContent = "ERROR";
-    renderNotes(["Quantity is required before any calculations can happen."], true);
-    renderBreakdown([]);
+    setError(["Quantity is required before any calculations can happen."]);
     return;
   }
 
   if (!category) {
-    el.status.textContent = "ERROR";
-    el.costPerPiece.textContent = "ERROR";
-    el.totalCost.textContent = "ERROR";
-    renderNotes(["Category is required."], true);
-    renderBreakdown([]);
+    setError(["Category is required."]);
     return;
   }
 
   if (!paperFormat) {
-    el.status.textContent = "ERROR";
-    el.costPerPiece.textContent = "ERROR";
-    el.totalCost.textContent = "ERROR";
-    renderNotes(["Paper Format is required."], true);
-    renderBreakdown([]);
+    setError(["Paper Format is required."]);
     return;
   }
 
   const paperItem = findByName(DATA.paperFormats, paperFormat);
-  if (!paperItem) {
-    notes.push(`Paper Format was not found: ${paperFormat}`);
-  } else if (paperItem.cost === null) {
-    notes.push(`Missing cost for Paper Format: ${paperFormat}`);
-  }
-
-  const autoEnvelopeName =
-    DATA.autoEnvelopeByCategoryAndPaper?.[category]?.[paperFormat] || null;
-
-  let envelopeItem = null;
-  if (autoEnvelopeName && autoEnvelopeName !== "No Envelope") {
-    envelopeItem = findByName(DATA.envelopeTypes, autoEnvelopeName);
-    if (!envelopeItem) {
-      notes.push(`Auto Envelope was not found: ${autoEnvelopeName}`);
-    } else if (envelopeItem.cost === null) {
-      notes.push(`Missing cost for Envelope Type: ${autoEnvelopeName}`);
-    }
-  }
-
-  let dataItem = null;
-  if (dataList) {
-    dataItem = findByName(DATA.dataLists, dataList);
-    if (!dataItem) {
-      notes.push(`Data List was not found: ${dataList}`);
-    } else if (dataItem.cost === null) {
-      notes.push(`Missing cost for Data List: ${dataList}`);
-    }
-  }
-
-  let colorItem = null;
-  if (colorOption) {
-    colorItem = findByName(DATA.colorOptions, colorOption);
-    if (!colorItem) {
-      notes.push(`Color Option was not found: ${colorOption}`);
-    } else if (colorItem.cost === null) {
-      notes.push(`Missing cost for Color Option: ${colorOption}`);
-    }
-  }
-
-  const fixedCostItems = [];
-  for (const fixedName of selectedFixedCharges) {
-    const item = (DATA.fixedCosts[category] || []).find(fc => fc.name === fixedName);
-    if (!item) {
-      notes.push(`Fixed Cost was not found: ${fixedName}`);
-    } else if (item.cost === null) {
-      notes.push(`Missing cost for Fixed Cost: ${fixedName}`);
-    } else {
-      fixedCostItems.push(item);
-    }
-  }
-
-  if (notes.length > 0) {
-    el.status.textContent = "ERROR";
-    el.costPerPiece.textContent = "ERROR";
-    el.totalCost.textContent = "ERROR";
-    renderNotes(notes, true);
-    renderBreakdown([]);
+  if (!paperItem || paperItem.cost === null) {
+    setError([`Missing cost for Paper Format: ${paperFormat}`]);
     return;
   }
 
-  let costPerPiece = 0;
+  let costPerPiece = paperItem.cost;
   let extraFlatTotal = 0;
 
-  costPerPiece += paperItem.cost;
-  breakdown.push({ label: `Paper Format: ${paperFormat}`, value: paperItem.cost, type: "money" });
+  noteLines.push(`Paper Format: ${paperFormat} = ${usd4(paperItem.cost)} per piece`);
 
   if (productType) {
-    breakdown.push({ label: "Product Type", value: productType, type: "text" });
+    noteLines.push(`Product Type: ${productType}`);
   }
+
+  const autoEnvelopeName = DATA.autoEnvelopeByCategoryAndPaper?.[category]?.[paperFormat] || null;
 
   if (autoEnvelopeName === "No Envelope") {
-    breakdown.push({ label: "Auto Envelope", value: "No Envelope", type: "text" });
-  } else if (envelopeItem) {
+    noteLines.push("Auto Envelope: No Envelope");
+  } else if (autoEnvelopeName) {
+    const envelopeItem = findByName(DATA.envelopeTypes, autoEnvelopeName);
+    if (!envelopeItem || envelopeItem.cost === null) {
+      setError([`Missing cost for Envelope Type: ${autoEnvelopeName}`]);
+      return;
+    }
     costPerPiece += envelopeItem.cost;
-    breakdown.push({ label: `Auto Envelope: ${autoEnvelopeName}`, value: envelopeItem.cost, type: "money" });
+    noteLines.push(`Auto Envelope: ${autoEnvelopeName} = ${usd4(envelopeItem.cost)} per piece`);
   } else {
-    breakdown.push({ label: "Auto Envelope", value: "No auto-envelope rule", type: "text" });
+    noteLines.push("Auto Envelope: No auto-envelope rule found");
   }
 
-  if (dataItem) {
+  if (dataList) {
+    const dataItem = findByName(DATA.dataLists, dataList);
+    if (!dataItem || dataItem.cost === null) {
+      setError([`Missing cost for Data List: ${dataList}`]);
+      return;
+    }
     costPerPiece += dataItem.cost;
-    breakdown.push({ label: `Data List: ${dataList}`, value: dataItem.cost, type: "money" });
+    noteLines.push(`Data List: ${dataList} = ${usd4(dataItem.cost)} per piece`);
   }
 
-  if (colorItem) {
+  if (colorOption) {
+    const colorItem = findByName(DATA.colorOptions, colorOption);
+    if (!colorItem || colorItem.cost === null) {
+      setError([`Missing cost for Color Option: ${colorOption}`]);
+      return;
+    }
     costPerPiece += colorItem.cost;
-    breakdown.push({ label: `Color Option: ${colorOption}`, value: colorItem.cost, type: "money" });
+    noteLines.push(`Color Option: ${colorOption} = ${usd4(colorItem.cost)} per piece`);
   }
 
-  fixedCostItems.forEach(item => {
-    costPerPiece += item.cost;
-    breakdown.push({ label: `Fixed Cost: ${item.name}`, value: item.cost, type: "money" });
+  const autoIncludedFixedCosts = getAutoIncludedFixedCosts(category);
+  autoIncludedFixedCosts.forEach(fixedName => {
+    const item = (DATA.fixedCosts[category] || []).find(fc => fc.name === fixedName);
+    if (item) {
+      costPerPiece += item.cost;
+      noteLines.push(`Fixed Cost (Auto Included): ${item.name} = ${usd4(item.cost)} per piece`);
+    }
   });
+
+  selectedFixedCharges.forEach(fixedName => {
+    const item = (DATA.fixedCosts[category] || []).find(fc => fc.name === fixedName);
+    if (item) {
+      costPerPiece += item.cost;
+      noteLines.push(`Fixed Cost: ${item.name} = ${usd4(item.cost)} per piece`);
+    }
+  });
+
+  if (
+    category === "HWL" &&
+    selectedFixedCharges.includes("HWL Long Form Labor") &&
+    selectedFixedCharges.includes("Envelope Labor")
+  ) {
+    costPerPiece -= 0.02;
+    noteLines.push(`HWL Discount: HWL Long Form Labor + Envelope Labor = -${usd4(0.02)} per piece`);
+  }
+
+  if (
+    category === "HWL" &&
+    selectedFixedCharges.includes("Post-it w/ Labor") &&
+    selectedFixedCharges.includes("Envelope Labor")
+  ) {
+    costPerPiece -= 0.02;
+    noteLines.push(`HWL Discount: Post-it w/ Labor + Envelope Labor = -${usd4(0.02)} per piece`);
+  }
 
   if (
     addAiVideo &&
@@ -543,38 +488,25 @@ function calculate() {
   ) {
     if (quantity >= 10000) {
       costPerPiece += DATA.aiVideoRule.perPieceCostAtOrAbove10000;
-      breakdown.push({
-        label: "AI Video",
-        value: DATA.aiVideoRule.perPieceCostAtOrAbove10000,
-        type: "money"
-      });
+      noteLines.push(`AI Video = ${usd4(DATA.aiVideoRule.perPieceCostAtOrAbove10000)} per piece`);
     } else {
       extraFlatTotal += DATA.aiVideoRule.setupCostUnder10000;
-      breakdown.push({
-        label: "AI Video Setup Flat",
-        value: DATA.aiVideoRule.setupCostUnder10000,
-        type: "money"
-      });
+      noteLines.push(`AI Video Setup Flat = ${usd2(DATA.aiVideoRule.setupCostUnder10000)}`);
     }
   }
 
   if (addCustomAiLikenessVideo) {
     extraFlatTotal += DATA.aiVideoRule.customAiLikenessVideoFlat;
-    breakdown.push({
-      label: "Custom AI Likeness Video Flat",
-      value: DATA.aiVideoRule.customAiLikenessVideoFlat,
-      type: "money"
-    });
+    noteLines.push(`Custom AI Likeness Video Flat = ${usd2(DATA.aiVideoRule.customAiLikenessVideoFlat)}`);
   }
 
-  const totalCost = costPerPiece * quantity + extraFlatTotal;
+  const rawTotalCost = (costPerPiece * quantity) + extraFlatTotal;
+  const roundedTotalCost = Math.round(rawTotalCost);
 
   el.status.textContent = "OK";
-  el.costPerPiece.textContent = usd(costPerPiece);
-  el.totalCost.textContent = usd(totalCost);
-
-  renderNotes([], false);
-  renderBreakdown(breakdown);
+  el.costPerPiece.textContent = usd4(costPerPiece);
+  el.totalCost.textContent = usd2(roundedTotalCost);
+  renderNoteLines(noteLines);
 }
 
 el.category.addEventListener("change", () => {
@@ -592,7 +524,9 @@ el.paperFormat.addEventListener("change", () => {
 });
 
 el.calculateBtn.addEventListener("click", calculate);
-el.resetBtn.addEventListener("click", resetForm);
 
 renderCategories();
-resetForm();
+updatePaperFormats();
+updateDataLists();
+updateColorOptions();
+renderFixedCharges();
